@@ -1,0 +1,14 @@
+**/dist/
+
+backend/*/bin/
+**/target/
+**/.flattened-pom.xml
+**/.apt_generated
+
+frontend/registree-frontend/.env*
+**/node_modules/
+
+**/.settings/
+**/.classpath
+**/.project
+**/.factorypath

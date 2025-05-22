@@ -1,0 +1,38 @@
+services:
+  postgresql:
+    image: postgres
+    container_name: postgresql
+    hostname: postgresql
+    environment:
+      - POSTGRES_PASSWORD=password
+      - TZ=Europe/Paris
+      - PGTZ=Europe/Paris
+    volumes:
+      - ./postgresql/docker-entrypoint-initdb.d/init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh
+      - ./postgresql/data:/var/lib/postgresql/data
+
+  registree-backend:
+    image: itesoft/registree-backend
+    container_name: registree-backend
+    hostname: registree-backend
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql/registree
+      - SPRING_DATASOURCE_USERNAME=registree
+      - SPRING_DATASOURCE_PASSWORD=registree
+      - SPRING_MVC_ASYNC_REQUEST_TIMEOUT=-1
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./registree-backend/data:/app/data
+    depends_on:
+      postgresql:
+        condition: service_started
+
+  registree-frontend:
+    image: itesoft/registree-frontend
+    container_name: registree-frontend
+    hostname: registree-frontend
+    environment:
+      - BACKEND_URL=http://localhost:8080
+    ports:
+      - "8081:80"

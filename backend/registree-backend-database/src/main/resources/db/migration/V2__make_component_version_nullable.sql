@@ -1,0 +1,1 @@
+ALTER TABLE reg_component ALTER COLUMN version DROP NOT NULL;
