@@ -20,6 +20,7 @@ import com.itesoft.registree.oci.rest.error.ErrorCode;
 import com.itesoft.registree.oci.rest.error.OciErrorManager;
 import com.itesoft.registree.oci.rest.proxy.auth.OciProxyAuthenticationManager;
 import com.itesoft.registree.proxy.HttpHelper;
+import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -47,6 +48,9 @@ public class ProxyRegistryRepositoryManager extends AbstractRegistryRepositoryMa
   private OciProxyAuthenticationManager proxyAuthenticationManager;
 
   @Autowired
+  private ProxyFilteringService filteringService;
+
+  @Autowired
   private ObjectMapper objectMapper;
 
   @Autowired
@@ -71,10 +75,14 @@ public class ProxyRegistryRepositoryManager extends AbstractRegistryRepositoryMa
     throws Exception {
     // TODO: add some ping to remove host, if not ok, use local data
 
-    final String remoteName = getRemoteName(name);
-
     final OciProxyRegistry proxyRegistry = (OciProxyRegistry) context.getRegistry();
+    final boolean included = filteringService.included(proxyRegistry,
+                                                       name);
+    if (!included) {
+      return ResponseEntity.notFound().build();
+    }
 
+    final String remoteName = getRemoteName(name);
     final URIBuilder uriBuilder =
       new URIBuilder(String.format(GET_TAGS_LIST_URL,
                                    proxyRegistry.getProxyUrl(),

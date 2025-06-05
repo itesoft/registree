@@ -108,8 +108,8 @@ public class MetadataStorage extends AbstractMavenStorage {
     final OutputStream outputStream = Files.newOutputStream(tempMetadataPath);
 
     return MetadataCreation.builder()
-      .tarballPath(metadataPath)
-      .tempTarballPath(tempMetadataPath)
+      .metadataPath(metadataPath)
+      .tempMetadataPath(tempMetadataPath)
       .outputStream(outputStream)
       .build();
   }
@@ -119,8 +119,8 @@ public class MetadataStorage extends AbstractMavenStorage {
     throws IOException {
     closeSilently(metadataCreation.getOutputStream());
 
-    Files.move(metadataCreation.getTempTarballPath(),
-               metadataCreation.getTarballPath(),
+    Files.move(metadataCreation.getTempMetadataPath(),
+               metadataCreation.getMetadataPath(),
                StandardCopyOption.ATOMIC_MOVE,
                StandardCopyOption.REPLACE_EXISTING);
   }
@@ -128,7 +128,7 @@ public class MetadataStorage extends AbstractMavenStorage {
   public void abortMetadataCreation(final Registry registry,
                                     final MetadataCreation metadataCreation) {
     closeSilently(metadataCreation.getOutputStream());
-    deleteSilently(metadataCreation.getTempTarballPath());
+    deleteSilently(metadataCreation.getTempMetadataPath());
   }
 
   public void removeVersionFromMetadata(final Registry registry,

@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import com.itesoft.registree.CloseableCleaner;
 import com.itesoft.registree.CloseableHolder;
+import com.itesoft.registree.dto.ProxyRegistry;
 import com.itesoft.registree.dto.Registry;
 import com.itesoft.registree.dto.RegistryType;
 import com.itesoft.registree.java.CheckedBiFunction;
@@ -677,7 +678,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
 
   private boolean useCache(final NpmOperationContext context,
                            final String cacheKey) {
-    final Registry registry = context.getRegistry();
-    return proxyCache.upToDate(registry.getName(), cacheKey);
+    final ProxyRegistry registry = (ProxyRegistry) context.getRegistry();
+    return proxyCache.upToDate(registry, cacheKey);
   }
 }

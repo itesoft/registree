@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,6 +29,8 @@ import com.itesoft.registree.oci.storage.BlobStorage;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -35,6 +38,8 @@ import org.springframework.util.FileSystemUtils;
 
 @Component
 public class UnusedBlobsCleaningTask {
+  private static final Logger LOGGER = LoggerFactory.getLogger(UnusedBlobsCleaningTask.class);
+
   @Autowired
   private OciRegistries ociRegistries;
 
@@ -47,7 +52,7 @@ public class UnusedBlobsCleaningTask {
   @Autowired
   private StorageHelper storageHelper;
 
-  @Scheduled(cron = "${oci.garbageCollecting.cron:-}")
+  @Scheduled(cron = "#{registreeOciConfiguration.garbageCollectingCron}")
   public void deleteUnusedBlobs() throws IOException {
     for (final Registry registry : ociRegistries.getRegistries()) {
       if (registry instanceof final StorageCapableRegistry storageCapableRegistry
@@ -58,6 +63,7 @@ public class UnusedBlobsCleaningTask {
   }
 
   private void cleanRegistry(final Registry registry) throws IOException {
+    LOGGER.info("Running cleanup on registry {}", registry.getName());
     final String storagePath = storageHelper.getStoragePath(registry);
     final Path repositoriesPath = Paths.get(storagePath,
                                             REPOSITORIES_PATH);
@@ -78,19 +84,23 @@ public class UnusedBlobsCleaningTask {
 
     final Path blobsPath = Paths.get(storagePath,
                                      BLOBS_PATH);
-    Files.find(blobsPath,
-               Integer.MAX_VALUE,
-               (file, basicFileAttributes) -> {
-                 return DATA_FILE_NAME.equals(file.getFileName().toString())
-                   && basicFileAttributes.isRegularFile();
-               })
-      .forEach(file -> {
-        final Path parent = file.getParent();
-        final String sha = parent.getParent().getParent().getFileName().toString() + ":" + parent.getFileName().toString();
-        if (!allUsedShas.contains(sha)) {
-          deleteRecursively(parent);
-        }
-      });
+    if (Files.isDirectory(blobsPath)) {
+      final List<Path> blobsToDelete = new ArrayList<Path>();
+      Files.find(blobsPath,
+                 Integer.MAX_VALUE,
+                 (file, basicFileAttributes) -> {
+                   return DATA_FILE_NAME.equals(file.getFileName().toString())
+                     && basicFileAttributes.isRegularFile();
+                 })
+        .forEach(file -> {
+          final Path parent = file.getParent();
+          final String sha = parent.getParent().getParent().getFileName().toString() + ":" + parent.getFileName().toString();
+          if (!allUsedShas.contains(sha)) {
+            blobsToDelete.add(parent);
+          }
+        });
+      blobsToDelete.forEach(p -> deleteRecursively(p));
+    }
 
     final Path basePath = Paths.get(storagePath);
     Files.find(basePath,
@@ -127,9 +137,13 @@ public class UnusedBlobsCleaningTask {
                                final Path manifestsPath,
                                final Set<String> allUsedShas)
     throws IOException {
+    final Path tagsPath = Paths.get(manifestsPath.toString(),
+                                    TAGS_FOLDER_NAME);
+    if (!Files.isDirectory(tagsPath)) {
+      return;
+    }
     final List<Path> manifestShaFiles =
-      Files.find(Paths.get(manifestsPath.toString(),
-                           TAGS_FOLDER_NAME),
+      Files.find(tagsPath,
                  Integer.MAX_VALUE,
                  (file, basicFileAttributes) -> {
                    return LINK_FILE_NAME.equals(file.getFileName().toString())
@@ -143,6 +157,9 @@ public class UnusedBlobsCleaningTask {
       final String manifestSha = Files.readString(manifestShaFile);
       usedManifestShas.add(manifestSha);
       final byte[] data = blobStorage.getBlobData(registry, manifestSha);
+      if (data == null) {
+        continue;
+      }
       final ManifestDto manifestDto = objectMapper.readValue(data, ManifestDto.class);
       addUsedBlob(usedLayerShas, manifestDto.getConfig());
       addUsedBlobs(usedLayerShas, manifestDto.getLayers());
@@ -157,8 +174,12 @@ public class UnusedBlobsCleaningTask {
   private void deleteUnusedRevisions(final Path manifestsPath,
                                      final Set<String> usedManifestShas)
     throws IOException {
-    Files.find(Paths.get(manifestsPath.toString(),
-                         REVISIONS_FOLDER_NAME),
+    final Path revisionsPath = Paths.get(manifestsPath.toString(),
+                                         REVISIONS_FOLDER_NAME);
+    if (!Files.isDirectory(revisionsPath)) {
+      return;
+    }
+    Files.find(revisionsPath,
                Integer.MAX_VALUE,
                (file, basicFileAttributes) -> {
                  if (!LINK_FILE_NAME.equals(file.getFileName().toString())) {
@@ -177,6 +198,9 @@ public class UnusedBlobsCleaningTask {
                                   final Set<String> usedLayerShas)
     throws IOException {
     final Path layersPath = manifestsPath.resolveSibling(LAYERS_FOLDER_NAME);
+    if (!Files.isDirectory(layersPath)) {
+      return;
+    }
     Files.find(layersPath,
                Integer.MAX_VALUE,
                (file, basicFileAttributes) -> {
@@ -193,13 +217,17 @@ public class UnusedBlobsCleaningTask {
   }
 
   private void addUsedBlobs(final Set<String> usedBlobShas, final List<BlobDto> blobDtos) {
-    for (final BlobDto blobDto : blobDtos) {
-      addUsedBlob(usedBlobShas, blobDto);
+    if (blobDtos != null) {
+      for (final BlobDto blobDto : blobDtos) {
+        addUsedBlob(usedBlobShas, blobDto);
+      }
     }
   }
 
   private void addUsedBlob(final Set<String> usedBlobShas, final BlobDto blobDto) {
-    usedBlobShas.add(blobDto.getDigest());
+    if (blobDto != null) {
+      usedBlobShas.add(blobDto.getDigest());
+    }
   }
 
   private void deleteRecursively(final Path path) {

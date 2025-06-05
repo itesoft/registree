@@ -1,5 +1,6 @@
 package com.itesoft.registree.maven.rest.proxy;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -8,7 +9,7 @@ import java.util.function.Supplier;
 
 import com.itesoft.registree.CloseableCleaner;
 import com.itesoft.registree.CloseableHolder;
-import com.itesoft.registree.dto.Registry;
+import com.itesoft.registree.dto.ProxyRegistry;
 import com.itesoft.registree.java.CheckedConsumer;
 import com.itesoft.registree.java.CheckedRunnable;
 import com.itesoft.registree.java.CheckedSupplier;
@@ -190,6 +191,7 @@ public class ProxyHelper {
               }
               try {
                 int read;
+                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 while ((read = inputStream.read(buffer)) != -1) {
                   clientCloseableHolder.setLastUsed(System.currentTimeMillis());
                   responseCloseableHolder.setLastUsed(System.currentTimeMillis());
@@ -197,6 +199,7 @@ public class ProxyHelper {
                     fileCreation.getOutputStream().write(buffer, 0, read);
                   }
                   outputStream.write(buffer, 0, read);
+                  baos.write(buffer, 0, read);
                 }
 
                 if (doStore) {
@@ -246,8 +249,8 @@ public class ProxyHelper {
 
   public boolean useCache(final MavenOperationContext context,
                           final Supplier<String> cacheKeySupplier) {
-    final Registry registry = context.getRegistry();
+    final ProxyRegistry registry = (ProxyRegistry) context.getRegistry();
     final String cacheKey = cacheKeySupplier.get();
-    return proxyCache.upToDate(registry.getName(), cacheKey);
+    return proxyCache.upToDate(registry, cacheKey);
   }
 }

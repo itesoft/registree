@@ -168,7 +168,7 @@ public class RegistryController implements RegistryApi {
   }
 
   private void checkRegistryExists(final String name) {
-    if (registryRepository.existsById(name)) {
+    if (!registryRepository.existsById(name)) {
       throw new NotFoundException(String.format("Registry with name [%s] was not found.", name));
     }
   }

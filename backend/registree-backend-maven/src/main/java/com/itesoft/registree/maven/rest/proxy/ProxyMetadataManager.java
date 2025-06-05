@@ -34,7 +34,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 @Component
 public class ProxyMetadataManager extends ReadOnlyMavenMetadataManager implements MavenMetadataManager {
-  private static final String GET_METADATA_URI = "%s/%s/" + METADATA_FILE_NAME;
+  private static final String GET_METADATA_URI = "%s/%s/%s/" + METADATA_FILE_NAME;
   private static final String GET_MD5_URI = GET_METADATA_URI + ".md5";
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ProxyMetadataManager.class);

@@ -5,21 +5,21 @@ import java.nio.file.Path;
 
 public class MetadataCreation implements FileCreation {
   public static class Builder {
-    private Path tarballPath;
-    private Path tempTarballPath;
+    private Path metadataPath;
+    private Path tempMetadataPath;
     private OutputStream outputStream;
 
     public Builder() {
       // empty default constructor
     }
 
-    public Builder tarballPath(final Path tarballPath) {
-      this.tarballPath = tarballPath;
+    public Builder metadataPath(final Path metadataPath) {
+      this.metadataPath = metadataPath;
       return this;
     }
 
-    public Builder tempTarballPath(final Path tempTarballPath) {
-      this.tempTarballPath = tempTarballPath;
+    public Builder tempMetadataPath(final Path tempMetadataPath) {
+      this.tempMetadataPath = tempMetadataPath;
       return this;
     }
 
@@ -37,33 +37,33 @@ public class MetadataCreation implements FileCreation {
     return new Builder();
   }
 
-  private Path tarballPath;
-  private Path tempTarballPath;
+  private Path metadataPath;
+  private Path tempMetadataPath;
   private OutputStream outputStream;
 
   public MetadataCreation() {
   }
 
   public MetadataCreation(final Builder builder) {
-    this.tarballPath = builder.tarballPath;
-    this.tempTarballPath = builder.tempTarballPath;
+    this.metadataPath = builder.metadataPath;
+    this.tempMetadataPath = builder.tempMetadataPath;
     this.outputStream = builder.outputStream;
   }
 
-  public Path getTarballPath() {
-    return tarballPath;
+  public Path getMetadataPath() {
+    return metadataPath;
   }
 
-  public void setTarballPath(final Path tarballPath) {
-    this.tarballPath = tarballPath;
+  public void setMetadataPath(final Path metadataPath) {
+    this.metadataPath = metadataPath;
   }
 
-  public Path getTempTarballPath() {
-    return tempTarballPath;
+  public Path getTempMetadataPath() {
+    return tempMetadataPath;
   }
 
-  public void setTempTarballPath(final Path tempTarballPath) {
-    this.tempTarballPath = tempTarballPath;
+  public void setTempMetadataPath(final Path tempMetadataPath) {
+    this.tempMetadataPath = tempMetadataPath;
   }
 
   @Override

@@ -96,8 +96,7 @@ public class GroupMetadataManager extends ReadOnlyMavenMetadataManager implement
                                    groupId,
                                    artifactId,
                                    member));
-      }
-      if (metadataVersioning != null) { // FIXME: can it be null? when?
+      } else { // FIXME: can it be null? when?
         if (lastUpdated.compareTo(metadataVersioning.getLastUpdated()) < 0) {
           lastUpdated = metadataVersioning.getLastUpdated();
         }
