@@ -16,13 +16,12 @@ import com.itesoft.registree.java.CheckedSupplier;
 import com.itesoft.registree.maven.dto.FileCreation;
 import com.itesoft.registree.maven.dto.MavenFile;
 import com.itesoft.registree.maven.rest.MavenOperationContext;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.proxy.ProxyCache;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpHead;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
@@ -45,7 +44,7 @@ public class ProxyHelper {
   private CloseableCleaner closeableCleaner;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Autowired
   private ProxyCache proxyCache;
@@ -85,14 +84,12 @@ public class ProxyHelper {
     final MavenFile file = localFileSupplier.get();
     boolean existsRemote = false;
     if (file == null && !useCache(context, cacheKeySupplier)) {
-      try (CloseableHttpClient httpClient = httpHelper.createHttpClient()) {
-        final URI fileUri = fileUriSupplier.get();
-        final HttpHead httpHead = new HttpHead(fileUri);
-        existsRemote =
-          httpClient.execute(httpHead, (response) -> {
-            return response.getCode() == HttpStatus.OK.value();
-          });
-      }
+      final URI fileUri = fileUriSupplier.get();
+      final HttpHead httpHead = new HttpHead(fileUri);
+      existsRemote =
+        httpClient.execute(httpHead, (response) -> {
+          return response.getCode() == HttpStatus.OK.value();
+        });
     }
 
     if (file != null || existsRemote) {
@@ -135,111 +132,95 @@ public class ProxyHelper {
 
     boolean askRemote = true;
     boolean doClose = true;
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
-    try {
-      if (md5 != null) {
-        final URI md5Uri = md5UriSupplier.get();
-        final HttpGet httpGet = new HttpGet(md5Uri);
-        final String remoteMd5 =
-          httpClient.execute(httpGet, (response) -> {
-            if (response.getCode() != HttpStatus.OK.value()) {
-              return null;
-            }
-            return EntityUtils.toString(response.getEntity());
-          });
+    if (md5 != null) {
+      final URI md5Uri = md5UriSupplier.get();
+      final HttpGet httpGet = new HttpGet(md5Uri);
+      final String remoteMd5 =
+        httpClient.execute(httpGet, (response) -> {
+          if (response.getCode() != HttpStatus.OK.value()) {
+            return null;
+          }
+          return EntityUtils.toString(response.getEntity());
+        });
 
-        if (md5.equals(remoteMd5)) {
-          askRemote = false;
-        } else {
-          publishMd5Consumer.accept(remoteMd5);
-        }
+      if (md5.equals(remoteMd5)) {
+        askRemote = false;
+      } else {
+        publishMd5Consumer.accept(remoteMd5);
       }
+    }
 
-      if (askRemote) {
-        final URI fileUri = fileUriSupplier.get();
-        final HttpGet httpGet = new HttpGet(fileUri);
-        final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
-        try {
-          if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-            proxyErrorMessageConsumer.accept(proxyResponse);
-            return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
-          }
+    if (askRemote) {
+      final URI fileUri = fileUriSupplier.get();
+      final HttpGet httpGet = new HttpGet(fileUri);
+      final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
+      try {
+        if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+          proxyErrorMessageConsumer.accept(proxyResponse);
+          return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
+        }
 
-          final byte[] buffer = new byte[10240];
-          final HttpEntity entity = proxyResponse.getEntity();
-          final InputStream inputStream = entity.getContent();
+        final byte[] buffer = new byte[10240];
+        final HttpEntity entity = proxyResponse.getEntity();
+        final InputStream inputStream = entity.getContent();
 
-          final boolean doStore = storageHelper.getDoStore(context.getRegistry());
-          if (doStore && prepareCreationRunnable != null) {
-            // FIXME: for performance reasons we stream to the client the same time we store
-            // locally
-            // so we create elements in database before they actually exist on drive
-            prepareCreationRunnable.run();
-          }
+        final boolean doStore = storageHelper.getDoStore(context.getRegistry());
+        if (doStore && prepareCreationRunnable != null) {
+          // FIXME: for performance reasons we stream to the client the same time we store
+          // locally
+          // so we create elements in database before they actually exist on drive
+          prepareCreationRunnable.run();
+        }
 
-          final CloseableHolder clientCloseableHolder = new CloseableHolder(httpClient);
-          closeableCleaner.add(clientCloseableHolder);
-          final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
-          closeableCleaner.add(responseCloseableHolder);
+        final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
+        closeableCleaner.add(responseCloseableHolder);
 
-          doClose = false;
-          final StreamingResponseBody stream = outputStream -> {
+        doClose = false;
+        final StreamingResponseBody stream = outputStream -> {
+          try {
+            T fileCreation = null;
+            if (doStore) {
+              fileCreation = initiateCreationSupplier.get();
+            }
             try {
-              T fileCreation = null;
-              if (doStore) {
-                fileCreation = initiateCreationSupplier.get();
+              int read;
+              final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+              while ((read = inputStream.read(buffer)) != -1) {
+                responseCloseableHolder.setLastUsed(System.currentTimeMillis());
+                if (fileCreation != null) {
+                  fileCreation.getOutputStream().write(buffer, 0, read);
+                }
+                outputStream.write(buffer, 0, read);
+                baos.write(buffer, 0, read);
               }
-              try {
-                int read;
-                final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                while ((read = inputStream.read(buffer)) != -1) {
-                  clientCloseableHolder.setLastUsed(System.currentTimeMillis());
-                  responseCloseableHolder.setLastUsed(System.currentTimeMillis());
-                  if (fileCreation != null) {
-                    fileCreation.getOutputStream().write(buffer, 0, read);
-                  }
-                  outputStream.write(buffer, 0, read);
-                  baos.write(buffer, 0, read);
-                }
 
-                if (doStore) {
-                  createFileConsumer.accept(fileCreation);
-                }
-              } catch (final Throwable throwable) {
-                if (doStore) {
-                  abortFileCreationConsumer.accept(fileCreation);
-                }
-                throw throwable;
+              if (doStore) {
+                createFileConsumer.accept(fileCreation);
               }
             } catch (final Throwable throwable) {
-              LOGGER.error(throwable.getMessage(), throwable);
-            } finally {
-              proxyResponse.close();
-              httpClient.close();
-              closeableCleaner.remove(clientCloseableHolder);
-              closeableCleaner.remove(responseCloseableHolder);
+              if (doStore) {
+                abortFileCreationConsumer.accept(fileCreation);
+              }
+              throw throwable;
             }
-          };
-
-          return ResponseEntity.status(HttpStatus.OK)
-            .body(stream);
-
-        } finally {
-          if (doClose) {
-            try {
-              proxyResponse.close();
-            } catch (final IOException exception) {
-              LOGGER.error(exception.getMessage(), exception);
-            }
+          } catch (final Throwable throwable) {
+            LOGGER.error(throwable.getMessage(), throwable);
+          } finally {
+            proxyResponse.close();
+            closeableCleaner.remove(responseCloseableHolder);
           }
-        }
-      }
-    } finally {
-      if (doClose) {
-        try {
-          httpClient.close();
-        } catch (final IOException exception) {
-          LOGGER.error(exception.getMessage(), exception);
+        };
+
+        return ResponseEntity.status(HttpStatus.OK)
+          .body(stream);
+
+      } finally {
+        if (doClose) {
+          try {
+            proxyResponse.close();
+          } catch (final IOException exception) {
+            LOGGER.error(exception.getMessage(), exception);
+          }
         }
       }
     }

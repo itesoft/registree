@@ -2,7 +2,6 @@ package com.itesoft.registree.maven.rest.proxy;
 
 import static com.itesoft.registree.maven.rest.proxy.ProxyHelper.toPath;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -20,12 +19,11 @@ import com.itesoft.registree.maven.rest.MavenOperationContext;
 import com.itesoft.registree.maven.rest.ReadOnlyMavenChecksumManager;
 import com.itesoft.registree.maven.rest.error.MavenErrorManager;
 import com.itesoft.registree.maven.storage.ChecksumStorage;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpHead;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
@@ -58,7 +56,7 @@ public class ProxyChecksumManager extends ReadOnlyMavenChecksumManager implement
   private ProxyFilteringService filteringService;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Override
   public RegistryType getType() {
@@ -370,35 +368,26 @@ public class ProxyChecksumManager extends ReadOnlyMavenChecksumManager implement
                                                             final Supplier<String> errorMessageSupplier,
                                                             final CheckedFunction<String, ResponseEntity<StreamingResponseBody>> okResultFunction)
     throws Exception {
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
-    try {
-      String checksum =
-        httpClient.execute(request, (response) -> {
-          if (response.getCode() != HttpStatus.OK.value()) {
-            if (proxyErrorMessageConsumer != null) {
-              proxyErrorMessageConsumer.accept(response);
-            }
-            return null;
+    String checksum =
+      httpClient.execute(request, (response) -> {
+        if (response.getCode() != HttpStatus.OK.value()) {
+          if (proxyErrorMessageConsumer != null) {
+            proxyErrorMessageConsumer.accept(response);
           }
-          return EntityUtils.toString(response.getEntity());
-        });
+          return null;
+        }
+        return EntityUtils.toString(response.getEntity());
+      });
 
-      if (checksum == null) {
-        checksum = localChecksumSupplier.get();
-      } else if (remoteChecksumConsumer != null) {
-        remoteChecksumConsumer.accept(checksum);
-      }
-
-      return toReponse(errorMessageSupplier,
-                       okResultFunction,
-                       checksum);
-    } finally {
-      try {
-        httpClient.close();
-      } catch (final IOException exception) {
-        LOGGER.error(exception.getMessage(), exception);
-      }
+    if (checksum == null) {
+      checksum = localChecksumSupplier.get();
+    } else if (remoteChecksumConsumer != null) {
+      remoteChecksumConsumer.accept(checksum);
     }
+
+    return toReponse(errorMessageSupplier,
+                     okResultFunction,
+                     checksum);
   }
 
   private ResponseEntity<StreamingResponseBody> toReponse(final Supplier<String> errorMessageSupplier,

@@ -6,14 +6,16 @@ import org.apache.hc.client5.http.impl.DefaultRedirectStrategy;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-@Component
-public class HttpHelper {
+@Configuration
+public class ApacheHttpConfiguration {
   @Autowired(required = false)
   private OpenTelemetry openTelemetry;
 
-  public CloseableHttpClient createHttpClient() {
+  @Bean
+  public CloseableHttpClient httpClient() {
     if (openTelemetry != null) {
       return ApacheHttpClientTelemetry.builder(openTelemetry)
           .build()

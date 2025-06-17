@@ -25,14 +25,13 @@ import com.itesoft.registree.oci.rest.error.OciErrorManager;
 import com.itesoft.registree.oci.rest.proxy.auth.OciProxyAuthenticationManager;
 import com.itesoft.registree.oci.storage.BlobStorage;
 import com.itesoft.registree.oci.storage.RepositoryStorage;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpHead;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
@@ -75,7 +74,7 @@ public class ProxyRegistryBlobManager extends ReadOnlyRegistryBlobManager implem
   private CloseableCleaner closeableCleaner;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Override
   public RegistryType getType() {
@@ -178,117 +177,101 @@ public class ProxyRegistryBlobManager extends ReadOnlyRegistryBlobManager implem
     }
     final URI uri = uriBuilder.build();
 
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
     HttpEntity entity = null;
+    final ClassicHttpRequest proxyRequest = proxyRequestSupplier.apply(uri);
+    proxyRequest.addHeader(HttpHeaders.ACCEPT_ENCODING, "gzip");
+    final boolean authenticated =
+      proxyAuthenticationManager.addAuthentication(proxyRequest,
+                                                   proxyRegistry,
+                                                   remoteName);
+    if (!authenticated) {
+      return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+        .build();
+    }
+
+    final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, proxyRequest, null);
     try {
-      final ClassicHttpRequest proxyRequest = proxyRequestSupplier.apply(uri);
-      proxyRequest.addHeader(HttpHeaders.ACCEPT_ENCODING, "gzip");
-      final boolean authenticated =
-        proxyAuthenticationManager.addAuthentication(proxyRequest,
-                                                     proxyRegistry,
-                                                     remoteName);
-      if (!authenticated) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-          .build();
+      if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+        LOGGER.error("[{}] Proxy answered with code {} when getting blob of {}@{}",
+                     proxyRegistry.getName(),
+                     proxyResponse.getCode(),
+                     name,
+                     digest);
+        return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
       }
 
-      final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, proxyRequest, null);
-      try {
-        if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-          LOGGER.error("[{}] Proxy answered with code {} when getting blob of {}@{}",
-                       proxyRegistry.getName(),
-                       proxyResponse.getCode(),
-                       name,
-                       digest);
-          return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
-        }
+      final Header contentTypeHeader = proxyResponse.getHeader(HttpHeaders.CONTENT_TYPE);
+      if (contentTypeHeader == null) {
+        // TODO: find better error code?
+        LOGGER.error("[{}] Failed to get content type from proxy",
+                     proxyRegistry.getName());
+        return errorManager.getErrorResponse(HttpStatus.BAD_REQUEST,
+                                             BLOB_UNKNOWN,
+                                             "Failed to get content type from proxy");
+      }
+      final Header contentLengthHeader = proxyResponse.getHeader(HttpHeaders.CONTENT_LENGTH);
+      if (contentLengthHeader == null) {
+        // TODO: find better error code?
+        LOGGER.error("[{}] Failed to get content length from proxy",
+                     proxyRegistry.getName());
+        return errorManager.getErrorResponse(HttpStatus.BAD_REQUEST,
+                                             BLOB_UNKNOWN,
+                                             "Failed to get content length from proxy");
+      }
 
-        final Header contentTypeHeader = proxyResponse.getHeader(HttpHeaders.CONTENT_TYPE);
-        if (contentTypeHeader == null) {
-          // TODO: find better error code?
-          LOGGER.error("[{}] Failed to get content type from proxy",
-                       proxyRegistry.getName());
-          return errorManager.getErrorResponse(HttpStatus.BAD_REQUEST,
-                                               BLOB_UNKNOWN,
-                                               "Failed to get content type from proxy");
-        }
-        final Header contentLengthHeader = proxyResponse.getHeader(HttpHeaders.CONTENT_LENGTH);
-        if (contentLengthHeader == null) {
-          // TODO: find better error code?
-          LOGGER.error("[{}] Failed to get content length from proxy",
-                       proxyRegistry.getName());
-          return errorManager.getErrorResponse(HttpStatus.BAD_REQUEST,
-                                               BLOB_UNKNOWN,
-                                               "Failed to get content length from proxy");
-        }
+      final HttpHeaders headers = getGetBlobHeaders(contentTypeHeader.getValue(),
+                                                    contentLengthHeader.getValue(),
+                                                    digest);
 
-        final HttpHeaders headers = getGetBlobHeaders(contentTypeHeader.getValue(),
-                                                      contentLengthHeader.getValue(),
-                                                      digest);
+      final OutputStream blobStream;
+      final BlobUpload blobUpload;
+      if (storageHelper.getDoStore(context.getRegistry())) {
+        blobUpload = blobStorage.createBlobUpload(context.getRegistry(), name);
+        blobStream = blobUpload.getOutputStream();
+      } else {
+        blobUpload = null;
+        blobStream = null;
+      }
 
-        final OutputStream blobStream;
-        final BlobUpload blobUpload;
-        if (storageHelper.getDoStore(context.getRegistry())) {
-          blobUpload = blobStorage.createBlobUpload(context.getRegistry(), name);
-          blobStream = blobUpload.getOutputStream();
-        } else {
-          blobUpload = null;
-          blobStream = null;
-        }
+      StreamingResponseBody stream = null;
+      entity = proxyResponse.getEntity();
+      if (entity != null) {
+        final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
+        closeableCleaner.add(responseCloseableHolder);
 
-        StreamingResponseBody stream = null;
-        entity = proxyResponse.getEntity();
-        if (entity != null) {
-          final CloseableHolder clientCloseableHolder = new CloseableHolder(httpClient);
-          closeableCleaner.add(clientCloseableHolder);
-          final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
-          closeableCleaner.add(responseCloseableHolder);
+        final byte[] buffer = new byte[10240];
+        final InputStream inputStream = entity.getContent();
 
-          final byte[] buffer = new byte[10240];
-          final InputStream inputStream = entity.getContent();
-
-          stream = outputStream -> {
-            try {
-              int read;
-              while ((read = inputStream.read(buffer)) != -1) {
-                clientCloseableHolder.setLastUsed(System.currentTimeMillis());
-                responseCloseableHolder.setLastUsed(System.currentTimeMillis());
-                if (blobStream != null) {
-                  blobStream.write(buffer, 0, read);
-                }
-                outputStream.write(buffer, 0, read);
-              }
-            } finally {
-              proxyResponse.close();
-              httpClient.close();
-              closeableCleaner.remove(clientCloseableHolder);
-              closeableCleaner.remove(responseCloseableHolder);
-            }
-
-            if (blobUpload != null) {
-              // TODO: createBlobFromUpload triggers createFile and sets anonymous user,
-              // no authentication available here since with are in a StreamingResponseBody
-              // performed from another thread
-              blobStorage.createBlobFromUpload(context.getRegistry(), name, digest, blobUpload.getUuid());
-              repositoryStorage.createLayer(context.getRegistry(), name, digest);
-            }
-          };
-        }
-
-        return ResponseEntity.ok().headers(headers).body(stream);
-      } finally {
-        if (entity == null) {
+        stream = outputStream -> {
           try {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+              responseCloseableHolder.setLastUsed(System.currentTimeMillis());
+              if (blobStream != null) {
+                blobStream.write(buffer, 0, read);
+              }
+              outputStream.write(buffer, 0, read);
+            }
+          } finally {
             proxyResponse.close();
-          } catch (final IOException exception) {
-            LOGGER.error(exception.getMessage(), exception);
+            closeableCleaner.remove(responseCloseableHolder);
           }
-        }
+
+          if (blobUpload != null) {
+            // TODO: createBlobFromUpload triggers createFile and sets anonymous user,
+            // no authentication available here since with are in a StreamingResponseBody
+            // performed from another thread
+            blobStorage.createBlobFromUpload(context.getRegistry(), name, digest, blobUpload.getUuid());
+            repositoryStorage.createLayer(context.getRegistry(), name, digest);
+          }
+        };
       }
+
+      return ResponseEntity.ok().headers(headers).body(stream);
     } finally {
       if (entity == null) {
         try {
-          httpClient.close();
+          proxyResponse.close();
         } catch (final IOException exception) {
           LOGGER.error(exception.getMessage(), exception);
         }

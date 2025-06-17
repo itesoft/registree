@@ -27,13 +27,12 @@ import com.itesoft.registree.npm.rest.NpmOperationContext;
 import com.itesoft.registree.npm.rest.NpmPackageManager;
 import com.itesoft.registree.npm.rest.ReadOnlyNpmPackageManager;
 import com.itesoft.registree.npm.rest.proxy.auth.NpmProxyAuthenticationManager;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.proxy.ProxyCache;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpEntity;
@@ -69,7 +68,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
   private CloseableCleaner closeableCleaner;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Autowired
   private ProxyCache proxyCache;
@@ -144,7 +143,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
         return null;
       };
 
-    final CheckedBiFunction<CloseableHttpClient, ClassicHttpResponse, ResponseEntity<StreamingResponseBody>> okFunction =
+    final CheckedBiFunction<HttpClient, ClassicHttpResponse, ResponseEntity<StreamingResponseBody>> okFunction =
       (httpClient, proxyResponse) -> {
         final GetPackageResult getPackageResult =
           storePackageJson(context,
@@ -310,7 +309,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
                                  final CheckedFunction<ClassicHttpResponse, T> proxyResponseNotModifiedFunction,
                                  final CheckedFunction<ClassicHttpResponse, T> proxyResponseErrorFunction,
                                  final CheckedFunction<ClassicHttpResponse, T> proxyResponseChecksumCheckerFunction,
-                                 final CheckedBiFunction<CloseableHttpClient, ClassicHttpResponse, T> proxyResponseOkFunction)
+                                 final CheckedBiFunction<HttpClient, ClassicHttpResponse, T> proxyResponseOkFunction)
     throws Exception {
     final NpmProxyRegistry proxyRegistry = (NpmProxyRegistry) context.getRegistry();
 
@@ -329,45 +328,34 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
     }
 
     boolean doClose = true;
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
+    final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
     try {
-      final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
-      try {
-        if (proxyResponse.getCode() == org.apache.hc.core5.http.HttpStatus.SC_NOT_MODIFIED) {
-          return proxyResponseNotModifiedFunction.apply(proxyResponse);
-        }
+      if (proxyResponse.getCode() == org.apache.hc.core5.http.HttpStatus.SC_NOT_MODIFIED) {
+        return proxyResponseNotModifiedFunction.apply(proxyResponse);
+      }
 
-        if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-          final Registry registry = context.getRegistry();
-          LOGGER.error("[{}] Proxy answered with code {} when getting package {}",
-                       registry.getName(),
-                       proxyResponse.getCode(),
-                       packageFullName);
-          return proxyResponseErrorFunction.apply(proxyResponse);
-        }
+      if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+        final Registry registry = context.getRegistry();
+        LOGGER.error("[{}] Proxy answered with code {} when getting package {}",
+                     registry.getName(),
+                     proxyResponse.getCode(),
+                     packageFullName);
+        return proxyResponseErrorFunction.apply(proxyResponse);
+      }
 
-        if (proxyResponseChecksumCheckerFunction != null) {
-          final T result = proxyResponseChecksumCheckerFunction.apply(proxyResponse);
-          if (result != null) {
-            return result;
-          }
-        }
-
-        doClose = false;
-        return proxyResponseOkFunction.apply(httpClient, proxyResponse);
-      } finally {
-        if (doClose) {
-          try {
-            proxyResponse.close();
-          } catch (final IOException exception) {
-            LOGGER.error(exception.getMessage(), exception);
-          }
+      if (proxyResponseChecksumCheckerFunction != null) {
+        final T result = proxyResponseChecksumCheckerFunction.apply(proxyResponse);
+        if (result != null) {
+          return result;
         }
       }
+
+      doClose = false;
+      return proxyResponseOkFunction.apply(httpClient, proxyResponse);
     } finally {
       if (doClose) {
         try {
-          httpClient.close();
+          proxyResponse.close();
         } catch (final IOException exception) {
           LOGGER.error(exception.getMessage(), exception);
         }
@@ -390,7 +378,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
         return null;
       };
 
-    final CheckedBiFunction<CloseableHttpClient, ClassicHttpResponse, Void> okFunction =
+    final CheckedBiFunction<HttpClient, ClassicHttpResponse, Void> okFunction =
       (httpClient, proxyResponse) -> {
         storePackageJson(context,
                          request,
@@ -415,7 +403,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
                                             final HttpServletRequest request,
                                             final String packageScope,
                                             final String packageName,
-                                            final CloseableHttpClient httpClient,
+                                            final HttpClient httpClient,
                                             final ClassicHttpResponse proxyResponse)
     throws Exception {
     try {
@@ -444,7 +432,6 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
       }
     } finally {
       closeSilently(proxyResponse);
-      closeSilently(httpClient);
     }
   }
 
@@ -477,7 +464,7 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
         return null;
       };
 
-    final CheckedBiFunction<CloseableHttpClient, ClassicHttpResponse, Version> okFunction =
+    final CheckedBiFunction<HttpClient, ClassicHttpResponse, Version> okFunction =
       (httpClient, proxyResponse) -> {
         storePackageJson(context,
                          request,
@@ -523,15 +510,13 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
     proxyAuthenticationManager.addAuthentication(httpGet,
                                                  proxyRegistry);
 
-    try (CloseableHttpClient httpClient = httpHelper.createHttpClient()) {
-      return httpClient.execute(httpGet, response -> {
-        if (response.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-          return null;
-        }
-        final HttpEntity entity = response.getEntity();
-        return getObjectMapper().readValue(entity.getContent(), Version.class);
-      });
-    }
+    return httpClient.execute(httpGet, response -> {
+      if (response.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+        return null;
+      }
+      final HttpEntity entity = response.getEntity();
+      return getObjectMapper().readValue(entity.getContent(), Version.class);
+    });
   }
 
   private ResponseEntity<StreamingResponseBody> downloadTarballRemote(final NpmOperationContext context,
@@ -556,96 +541,81 @@ public class ProxyPackageManager extends ReadOnlyNpmPackageManager implements Np
                                                  proxyRegistry);
 
     boolean doClose = true;
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
+
+    final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
     try {
-      final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
-      try {
-        if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-          final Registry registry = context.getRegistry();
-          LOGGER.error("[{}] Proxy answered with code {} when downloading tarball {}/{}",
-                       registry.getName(),
-                       proxyResponse.getCode(),
-                       packageFullName,
-                       fileName);
-          return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
-        }
-
-        final byte[] buffer = new byte[10240];
-        final HttpEntity entity = proxyResponse.getEntity();
-        final InputStream inputStream = entity.getContent();
-
-        final boolean doStore = storageHelper.getDoStore(context.getRegistry());
-        if (doStore) {
-          // FIXME: for performance reasons we stream to the client the same time we store
-          // locally
-          // so we create elements in database before they actually exist on drive
-          getPackageStorage().prepareTarballCreation(context.getRegistry(),
-                                                     packageScope,
-                                                     packageName,
-                                                     fileName);
-        }
-
-        final CloseableHolder clientCloseableHolder = new CloseableHolder(httpClient);
-        closeableCleaner.add(clientCloseableHolder);
-        final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
-        closeableCleaner.add(responseCloseableHolder);
-
-        doClose = false;
-        final StreamingResponseBody stream = outputStream -> {
-          try {
-            TarballCreation tarballCreation = null;
-            if (doStore) {
-              tarballCreation = getPackageStorage().initiateTarballCreation(context.getRegistry(),
-                                                                            packageScope,
-                                                                            packageName,
-                                                                            fileName);
-            }
-            try {
-              int read;
-              while ((read = inputStream.read(buffer)) != -1) {
-                clientCloseableHolder.setLastUsed(System.currentTimeMillis());
-                responseCloseableHolder.setLastUsed(System.currentTimeMillis());
-                if (tarballCreation != null) {
-                  tarballCreation.getOutputStream().write(buffer, 0, read);
-                }
-                outputStream.write(buffer, 0, read);
-              }
-
-              if (doStore) {
-                getPackageStorage().createTarball(context.getRegistry(), tarballCreation);
-              }
-            } catch (final Throwable throwable) {
-              if (doStore) {
-                getPackageStorage().abortTarballCreation(context.getRegistry(), tarballCreation);
-              }
-              throw throwable;
-            }
-          } finally {
-            proxyResponse.close();
-            httpClient.close();
-            closeableCleaner.remove(clientCloseableHolder);
-            closeableCleaner.remove(responseCloseableHolder);
-          }
-        };
-
-        final HttpHeaders headers = createHeadersWithEtag(proxyResponse);
-
-        return ResponseEntity.status(HttpStatus.OK)
-          .headers(headers)
-          .body(stream);
-      } finally {
-        if (doClose) {
-          try {
-            proxyResponse.close();
-          } catch (final IOException exception) {
-            LOGGER.error(exception.getMessage(), exception);
-          }
-        }
+      if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+        final Registry registry = context.getRegistry();
+        LOGGER.error("[{}] Proxy answered with code {} when downloading tarball {}/{}",
+                     registry.getName(),
+                     proxyResponse.getCode(),
+                     packageFullName,
+                     fileName);
+        return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
       }
+
+      final byte[] buffer = new byte[10240];
+      final HttpEntity entity = proxyResponse.getEntity();
+      final InputStream inputStream = entity.getContent();
+
+      final boolean doStore = storageHelper.getDoStore(context.getRegistry());
+      if (doStore) {
+        // FIXME: for performance reasons we stream to the client the same time we store
+        // locally
+        // so we create elements in database before they actually exist on drive
+        getPackageStorage().prepareTarballCreation(context.getRegistry(),
+                                                   packageScope,
+                                                   packageName,
+                                                   fileName);
+      }
+
+      final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
+      closeableCleaner.add(responseCloseableHolder);
+
+      doClose = false;
+      final StreamingResponseBody stream = outputStream -> {
+        try {
+          TarballCreation tarballCreation = null;
+          if (doStore) {
+            tarballCreation = getPackageStorage().initiateTarballCreation(context.getRegistry(),
+                                                                          packageScope,
+                                                                          packageName,
+                                                                          fileName);
+          }
+          try {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+              responseCloseableHolder.setLastUsed(System.currentTimeMillis());
+              if (tarballCreation != null) {
+                tarballCreation.getOutputStream().write(buffer, 0, read);
+              }
+              outputStream.write(buffer, 0, read);
+            }
+
+            if (doStore) {
+              getPackageStorage().createTarball(context.getRegistry(), tarballCreation);
+            }
+          } catch (final Throwable throwable) {
+            if (doStore) {
+              getPackageStorage().abortTarballCreation(context.getRegistry(), tarballCreation);
+            }
+            throw throwable;
+          }
+        } finally {
+          proxyResponse.close();
+          closeableCleaner.remove(responseCloseableHolder);
+        }
+      };
+
+      final HttpHeaders headers = createHeadersWithEtag(proxyResponse);
+
+      return ResponseEntity.status(HttpStatus.OK)
+        .headers(headers)
+        .body(stream);
     } finally {
       if (doClose) {
         try {
-          httpClient.close();
+          proxyResponse.close();
         } catch (final IOException exception) {
           LOGGER.error(exception.getMessage(), exception);
         }

@@ -21,15 +21,14 @@ import com.itesoft.registree.oci.rest.ReadOnlyRegistryManifestManager;
 import com.itesoft.registree.oci.rest.error.OciErrorManager;
 import com.itesoft.registree.oci.rest.proxy.auth.OciProxyAuthenticationManager;
 import com.itesoft.registree.oci.storage.RepositoryStorage;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpHead;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
@@ -71,7 +70,7 @@ public class ProxyRegistryManifestManager extends ReadOnlyRegistryManifestManage
   private ObjectMapper objectMapper;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Override
   public RegistryType getType() {
@@ -267,27 +266,25 @@ public class ProxyRegistryManifestManager extends ReadOnlyRegistryManifestManage
     }
     final URI uri = uriBuilder.build();
 
-    try (CloseableHttpClient httpClient = httpHelper.createHttpClient()) {
-      final ClassicHttpRequest proxyRequest = proxyRequestSupplier.apply(uri);
-      addAcceptHeader(proxyRequest);
-      final boolean authenticated =
-        proxyAuthenticationManager.addAuthentication(proxyRequest,
-                                                     proxyRegistry,
-                                                     remoteName);
-      if (!authenticated) {
-        return null;
-      }
-
-      return httpClient.execute(proxyRequest, proxyResponse -> {
-        try {
-          return proxyResponseManager.apply(proxyResponse);
-        } catch (final IOException exception) {
-          throw exception;
-        } catch (final Exception exception) {
-          throw new IOException(exception.getMessage(), exception);
-        }
-      });
+    final ClassicHttpRequest proxyRequest = proxyRequestSupplier.apply(uri);
+    addAcceptHeader(proxyRequest);
+    final boolean authenticated =
+      proxyAuthenticationManager.addAuthentication(proxyRequest,
+                                                   proxyRegistry,
+                                                   remoteName);
+    if (!authenticated) {
+      return null;
     }
+
+    return httpClient.execute(proxyRequest, proxyResponse -> {
+      try {
+        return proxyResponseManager.apply(proxyResponse);
+      } catch (final IOException exception) {
+        throw exception;
+      } catch (final Exception exception) {
+        throw new IOException(exception.getMessage(), exception);
+      }
+    });
   }
 
   private void addAcceptHeader(final ClassicHttpRequest request) {

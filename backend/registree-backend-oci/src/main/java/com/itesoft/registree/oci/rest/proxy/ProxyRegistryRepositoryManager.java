@@ -19,12 +19,11 @@ import com.itesoft.registree.oci.rest.OciRegistryRepositoryManager;
 import com.itesoft.registree.oci.rest.error.ErrorCode;
 import com.itesoft.registree.oci.rest.error.OciErrorManager;
 import com.itesoft.registree.oci.rest.proxy.auth.OciProxyAuthenticationManager;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.net.URIBuilder;
 import org.slf4j.Logger;
@@ -54,7 +53,7 @@ public class ProxyRegistryRepositoryManager extends AbstractRegistryRepositoryMa
   private ObjectMapper objectMapper;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Override
   public RegistryType getType() {
@@ -99,24 +98,21 @@ public class ProxyRegistryRepositoryManager extends AbstractRegistryRepositoryMa
         .build();
     }
 
-    final List<String> remoteTags;
-    try (CloseableHttpClient httpClient = httpHelper.createHttpClient()) {
-      remoteTags = httpClient.execute(httpGet, proxyResponse -> {
-        final HttpEntity entity = proxyResponse.getEntity();
+    final List<String> remoteTags = httpClient.execute(httpGet, proxyResponse -> {
+      final HttpEntity entity = proxyResponse.getEntity();
 
-        if (HttpStatus.OK.value() != proxyResponse.getCode()) {
-          LOGGER.error("[{}] Proxy answered with code {} when getting tags of {}",
-                       proxyRegistry.getName(),
-                       proxyResponse.getCode(),
-                       name);
-          return null;
-        }
+      if (HttpStatus.OK.value() != proxyResponse.getCode()) {
+        LOGGER.error("[{}] Proxy answered with code {} when getting tags of {}",
+                     proxyRegistry.getName(),
+                     proxyResponse.getCode(),
+                     name);
+        return null;
+      }
 
-        final RepositoryTagsDto repositoryTagsDto =
-          objectMapper.readValue(entity.getContent(), RepositoryTagsDto.class);
-        return repositoryTagsDto.getTags();
-      });
-    }
+      final RepositoryTagsDto repositoryTagsDto =
+        objectMapper.readValue(entity.getContent(), RepositoryTagsDto.class);
+      return repositoryTagsDto.getTags();
+    });
 
     final RepositoryTagsDto repositoryTags = new RepositoryTagsDto();
     repositoryTags.setName(name);

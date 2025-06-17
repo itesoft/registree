@@ -10,11 +10,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.itesoft.registree.oci.config.OciProxyRegistry;
-import com.itesoft.registree.proxy.HttpHelper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
@@ -31,7 +30,7 @@ public class OciProxyAuthenticationManager {
   private ObjectMapper objectMapper;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   private class AuthHeader {
     private final String authorizationHeader;
@@ -76,33 +75,31 @@ public class OciProxyAuthenticationManager {
     bearerAuthenticationCache.put(proxyRegistry.getName(), authPerName);
 
     boolean addBasicAuth = false;
-    try (CloseableHttpClient httpClient = httpHelper.createHttpClient()) {
-      final HttpGet httpGet = new HttpGet(String.format("%s/v2/", proxyRegistry.getProxyUrl()));
+    final HttpGet httpGet = new HttpGet(String.format("%s/v2/", proxyRegistry.getProxyUrl()));
 
-      final String wwwAuthenticate;
-      try (ClassicHttpResponse response = httpClient.executeOpen(null, httpGet, null)) {
-        if (response.getCode() == HttpStatus.SC_OK) {
-          return true;
-        }
-
-        if (response.getCode() != HttpStatus.SC_UNAUTHORIZED) {
-          return false;
-        }
-
-        final Header wwwAuthenticateHeader = response.getHeader(HttpHeaders.WWW_AUTHENTICATE);
-        wwwAuthenticate = wwwAuthenticateHeader.getValue();
+    final String wwwAuthenticate;
+    try (ClassicHttpResponse response = httpClient.executeOpen(null, httpGet, null)) {
+      if (response.getCode() == HttpStatus.SC_OK) {
+        return true;
       }
 
-      if (wwwAuthenticate.startsWith("Basic ")) {
-        addBasicAuth = true;
-      } else {
-        return bearerAuth(httpRequest,
-                          proxyRegistry,
-                          name,
-                          authPerName,
-                          httpClient,
-                          wwwAuthenticate);
+      if (response.getCode() != HttpStatus.SC_UNAUTHORIZED) {
+        return false;
       }
+
+      final Header wwwAuthenticateHeader = response.getHeader(HttpHeaders.WWW_AUTHENTICATE);
+      wwwAuthenticate = wwwAuthenticateHeader.getValue();
+    }
+
+    if (wwwAuthenticate.startsWith("Basic ")) {
+      addBasicAuth = true;
+    } else {
+      return bearerAuth(httpRequest,
+                        proxyRegistry,
+                        name,
+                        authPerName,
+                        httpClient,
+                        wwwAuthenticate);
     }
 
     if (addBasicAuth) {
@@ -123,7 +120,7 @@ public class OciProxyAuthenticationManager {
                              final OciProxyRegistry proxyRegistry,
                              final String name,
                              final Map<String, AuthHeader> authPerName,
-                             final CloseableHttpClient httpClient,
+                             final HttpClient httpClient,
                              final String wwwAuthenticate)
     throws URISyntaxException, IOException {
     final String wwwAuthenticateParametersAsString = wwwAuthenticate.substring("Bearer ".length());

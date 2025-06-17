@@ -11,7 +11,6 @@ import com.itesoft.registree.CloseableHolder;
 import com.itesoft.registree.dto.ProxyRegistry;
 import com.itesoft.registree.dto.Registry;
 import com.itesoft.registree.dto.RegistryType;
-import com.itesoft.registree.proxy.HttpHelper;
 import com.itesoft.registree.raw.dto.RawFile;
 import com.itesoft.registree.raw.dto.RawFileCreation;
 import com.itesoft.registree.raw.rest.RawFileManager;
@@ -21,8 +20,8 @@ import com.itesoft.registree.raw.storage.FileStorage;
 import com.itesoft.registree.registry.api.storage.StorageHelper;
 import com.itesoft.registree.registry.filtering.ProxyFilteringService;
 
+import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.net.URIBuilder;
@@ -51,7 +50,7 @@ public class ProxyFileManager extends ReadOnlyRawFileManager implements RawFileM
   private CloseableCleaner closeableCleaner;
 
   @Autowired
-  private HttpHelper httpHelper;
+  private HttpClient httpClient;
 
   @Override
   public RegistryType getType() {
@@ -100,90 +99,74 @@ public class ProxyFileManager extends ReadOnlyRawFileManager implements RawFileM
     final URI uri = uriBuilder.build();
     final HttpGet httpGet = new HttpGet(uri);
     boolean doClose = true;
-    final CloseableHttpClient httpClient = httpHelper.createHttpClient();
+    final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
     try {
-      final ClassicHttpResponse proxyResponse = httpClient.executeOpen(null, httpGet, null);
-      try {
-        if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
-          final Registry registry = context.getRegistry();
-          LOGGER.error("[{}] Proxy answered with code {} when downloading file {}",
-                       registry.getName(),
-                       proxyResponse.getCode(),
-                       name);
-          return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
-        }
-
-        final CloseableHolder clientCloseableHolder = new CloseableHolder(httpClient);
-        closeableCleaner.add(clientCloseableHolder);
-        final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
-        closeableCleaner.add(responseCloseableHolder);
-
-        final byte[] buffer = new byte[10240];
-        final HttpEntity entity = proxyResponse.getEntity();
-        final String contentType = entity.getContentType();
-        final InputStream inputStream = entity.getContent();
-
-        final boolean doStore = storageHelper.getDoStore(context.getRegistry());
-        if (doStore) {
-          // FIXME: for performance reasons we stream to the client the same time we store
-          // locally
-          // so we create elements in database before they actually exist on drive
-          fileStorage.prepareFileCreation(context.getRegistry(),
-                                          name,
-                                          contentType);
-        }
-
-        doClose = false;
-        final StreamingResponseBody stream = outputStream -> {
-          try {
-            RawFileCreation rawFileCreation = null;
-            if (doStore) {
-              rawFileCreation = fileStorage.initiateFileCreation(context.getRegistry(),
-                                                                 name);
-            }
-            try {
-              int read;
-              while ((read = inputStream.read(buffer)) != -1) {
-                clientCloseableHolder.setLastUsed(System.currentTimeMillis());
-                responseCloseableHolder.setLastUsed(System.currentTimeMillis());
-                if (rawFileCreation != null) {
-                  rawFileCreation.getOutputStream().write(buffer, 0, read);
-                }
-                outputStream.write(buffer, 0, read);
-              }
-
-              if (doStore) {
-                fileStorage.createFile(context.getRegistry(), rawFileCreation);
-              }
-            } catch (final Throwable throwable) {
-              if (doStore) {
-                fileStorage.abortFileCreation(context.getRegistry(), rawFileCreation);
-              }
-              throw throwable;
-            }
-          } finally {
-            proxyResponse.close();
-            httpClient.close();
-            closeableCleaner.remove(clientCloseableHolder);
-            closeableCleaner.remove(responseCloseableHolder);
-          }
-        };
-
-        return ResponseEntity.status(HttpStatus.OK)
-          .body(stream);
-      } finally {
-        if (doClose) {
-          try {
-            proxyResponse.close();
-          } catch (final IOException exception) {
-            LOGGER.error(exception.getMessage(), exception);
-          }
-        }
+      if (proxyResponse.getCode() != org.apache.hc.core5.http.HttpStatus.SC_OK) {
+        final Registry registry = context.getRegistry();
+        LOGGER.error("[{}] Proxy answered with code {} when downloading file {}",
+                     registry.getName(),
+                     proxyResponse.getCode(),
+                     name);
+        return ResponseEntity.status(HttpStatus.valueOf(proxyResponse.getCode())).build();
       }
+
+      final CloseableHolder responseCloseableHolder = new CloseableHolder(proxyResponse);
+      closeableCleaner.add(responseCloseableHolder);
+
+      final byte[] buffer = new byte[10240];
+      final HttpEntity entity = proxyResponse.getEntity();
+      final String contentType = entity.getContentType();
+      final InputStream inputStream = entity.getContent();
+
+      final boolean doStore = storageHelper.getDoStore(context.getRegistry());
+      if (doStore) {
+        // FIXME: for performance reasons we stream to the client the same time we store
+        // locally
+        // so we create elements in database before they actually exist on drive
+        fileStorage.prepareFileCreation(context.getRegistry(),
+                                        name,
+                                        contentType);
+      }
+
+      doClose = false;
+      final StreamingResponseBody stream = outputStream -> {
+        try {
+          RawFileCreation rawFileCreation = null;
+          if (doStore) {
+            rawFileCreation = fileStorage.initiateFileCreation(context.getRegistry(),
+                                                               name);
+          }
+          try {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+              responseCloseableHolder.setLastUsed(System.currentTimeMillis());
+              if (rawFileCreation != null) {
+                rawFileCreation.getOutputStream().write(buffer, 0, read);
+              }
+              outputStream.write(buffer, 0, read);
+            }
+
+            if (doStore) {
+              fileStorage.createFile(context.getRegistry(), rawFileCreation);
+            }
+          } catch (final Throwable throwable) {
+            if (doStore) {
+              fileStorage.abortFileCreation(context.getRegistry(), rawFileCreation);
+            }
+            throw throwable;
+          }
+        } finally {
+          proxyResponse.close();
+          closeableCleaner.remove(responseCloseableHolder);
+        }
+      };
+
+      return ResponseEntity.status(HttpStatus.OK)
+        .body(stream);
     } finally {
       if (doClose) {
         try {
-          httpClient.close();
+          proxyResponse.close();
         } catch (final IOException exception) {
           LOGGER.error(exception.getMessage(), exception);
         }
