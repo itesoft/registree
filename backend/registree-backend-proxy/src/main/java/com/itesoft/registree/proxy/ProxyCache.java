@@ -5,6 +5,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.itesoft.registree.dto.ProxyRegistry;
 
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,8 +22,16 @@ public class ProxyCache {
     }
   }
 
+  @WithSpan
   public boolean upToDate(final ProxyRegistry proxyRegistry,
                           final String key) {
+    final boolean result = doUpToDate(proxyRegistry, key);
+    Span.current().addEvent("up-to-date", Attributes.of(AttributeKey.booleanKey("is up to date"), result));
+    return result;
+  }
+
+  private boolean doUpToDate(final ProxyRegistry proxyRegistry,
+                             final String key) {
     if (!proxyRegistry.isDoStore()) {
       return false;
     }
