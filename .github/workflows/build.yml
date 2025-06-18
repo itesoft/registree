@@ -15,4 +15,5 @@ jobs:
 
       - name: Build backend
         uses: ./.github/actions/registree-builder
-        run: mvn install
+        with:
+          run: mvn install
