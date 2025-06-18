@@ -1,0 +1,9 @@
+name: 'Registree builder'
+description: 'Registree builder'
+inputs:
+  run:
+    description: 'Command to run'
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
