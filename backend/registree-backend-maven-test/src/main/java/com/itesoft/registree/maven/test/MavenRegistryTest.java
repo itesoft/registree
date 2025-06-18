@@ -171,7 +171,7 @@ public abstract class MavenRegistryTest extends RegistryTest {
                                              final String registryName)
     throws Exception {
     mvnDeploy(1,
-              "unauthorized",
+              "401",
               7,
               settingsXml,
               projectPath,
@@ -194,7 +194,7 @@ public abstract class MavenRegistryTest extends RegistryTest {
     throws Exception {
     execute(expectedRetCode,
             errorMessageExtract,
-            7,
+            9,
             "mvn",
             "install",
             "-U",

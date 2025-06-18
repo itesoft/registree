@@ -156,8 +156,14 @@ public abstract class RegistryTest {
   }
 
   protected void createProxyRegistry(final String proxyUrl)
+      throws JsonProcessingException {
+      createProxyRegistry(true, proxyUrl, 0, null, null);
+  }
+
+  protected void createProxyRegistry(final String name,
+                                     final String proxyUrl)
     throws JsonProcessingException {
-    createProxyRegistry(true, proxyUrl, 0, null, null);
+    createProxyRegistry(name, true, proxyUrl, 0, null, null);
   }
 
   protected void createProxyRegistry(final String proxyUrl,
@@ -167,6 +173,21 @@ public abstract class RegistryTest {
   }
 
   protected void createProxyRegistry(final boolean doStore,
+                                     final String proxyUrl,
+                                     final int cacheTimeout,
+                                     final ProxyRegistryFiltering proxyRegistryFiltering,
+                                     final Map<String, Object> additionalConfiguration)
+    throws JsonProcessingException {
+    createProxyRegistry(PROXY_REGISTRY_NAME,
+                        doStore,
+                        proxyUrl,
+                        cacheTimeout,
+                        proxyRegistryFiltering,
+                        additionalConfiguration);
+  }
+
+  protected void createProxyRegistry(final String name,
+                                     final boolean doStore,
                                      final String proxyUrl,
                                      final int cacheTimeout,
                                      final ProxyRegistryFiltering proxyRegistryFiltering,
@@ -184,17 +205,23 @@ public abstract class RegistryTest {
     if (additionalConfiguration != null) {
       configurationAsMap.putAll(additionalConfiguration);
     }
-    createProxyRegistry(configurationAsMap);
+    createProxyRegistry(name, configurationAsMap);
   }
 
   protected void createProxyRegistry(final Map<String, Object> configurationAsMap)
+    throws JsonProcessingException {
+    createProxyRegistry(PROXY_REGISTRY_NAME, configurationAsMap);
+  }
+
+  protected void createProxyRegistry(final String name,
+                                     final Map<String, Object> configurationAsMap)
     throws JsonProcessingException {
     final String configuration = objectMapper.writeValueAsString(configurationAsMap);
 
     final CreateRegistryArgs createRegistryArgs = CreateRegistryArgs.builder()
       .format(getFormat())
       .type(RegistryType.PROXY.getValue())
-      .name(PROXY_REGISTRY_NAME)
+      .name(name)
       .configuration(configuration)
       .build();
     registryClient.createRegistry(createRegistryArgs);
