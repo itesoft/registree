@@ -15,12 +15,11 @@ jobs:
 
       - name: Build backend
         uses: ./.github/actions/registree-builder
-        with:
-          run: mvn install
+        run:
+          mvn install
 
       - name: Build frontend
         uses: ./.github/actions/registree-builder
-        with:
-          run: |
-            cd frontend/registree-frontend
-            npm ci
+        run: |
+          cd frontend/registree-frontend
+          npm ci
