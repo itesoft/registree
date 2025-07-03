@@ -17,3 +17,10 @@ jobs:
         uses: ./.github/actions/registree-builder
         with:
           run: mvn install
+
+      - name: Build frontend
+        uses: ./.github/actions/registree-builder
+        with:
+          run: |
+            cd frontend/registree-frontend
+            npm ci
