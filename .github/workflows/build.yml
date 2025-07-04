@@ -1,0 +1,27 @@
+name: Builds registree
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend
+        uses: ./.github/actions/registree-builder
+        with:
+          run:
+            mvn install
+
+      - name: Build frontend
+        uses: ./.github/actions/registree-builder
+        with:
+          run: |
+            cd frontend/registree-frontend
+            npm ci
