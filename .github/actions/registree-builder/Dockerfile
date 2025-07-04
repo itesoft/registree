@@ -37,3 +37,7 @@ RUN apt-get update && apt-get install --no-install-suggests --no-install-recomme
   # cleanup
   && apt-get clean \
   && apt-get autoremove -y
+
+COPY entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
