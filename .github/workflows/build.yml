@@ -13,13 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: ./.github/actions/registree-builder
       - name: Build backend
-        uses: ./.github/actions/registree-builder
-        run:
-          mvn install
-
+        run: mvn install
       - name: Build frontend
-        uses: ./.github/actions/registree-builder
         run: |
           cd frontend/registree-frontend
           npm ci
