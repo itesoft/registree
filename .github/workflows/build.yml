@@ -13,15 +13,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build backend
-        uses: ./.github/actions/registree-builder
-        with:
-          run:
-            mvn install
+      - name: Build custom image
+        run: |
+          docker build -t registree-builder .github/build-image
 
-      - name: Build frontend
-        uses: ./.github/actions/registree-builder
+      - name: Build backend
+        uses: addnab/docker-run-action@v3
         with:
+          image: registree-builder
           run: |
-            cd frontend/registree-frontend
-            npm ci
+            mvn install
