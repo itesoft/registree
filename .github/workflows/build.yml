@@ -21,5 +21,8 @@ jobs:
         uses: addnab/docker-run-action@v3
         with:
           image: registree-builder
+          options: |
+            -v ${{github.workspace}}:/src
+            -w /src
           run: |
             mvn install
