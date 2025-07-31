@@ -34,12 +34,12 @@ public class DockerProxyRegistryWithExcludedFilterTest extends DockerRegistryTes
 
   @Test
   public void pullExcluded() throws Exception {
-    execute(1, "unknown", 1, "docker", "pull", "localhost:8070/alpine/curl");
+    execute(1, "unknown", 1, "docker", "pull", registreeHostname + ":8070/alpine/curl");
   }
 
   @Test
   public void pullNotExcluded() throws Exception {
-    execute("docker", "pull", "localhost:8070/alpine");
-    execute("docker", "rmi", "localhost:8070/alpine");
+    execute("docker", "pull", registreeHostname + ":8070/alpine");
+    execute("docker", "rmi", registreeHostname + ":8070/alpine");
   }
 }

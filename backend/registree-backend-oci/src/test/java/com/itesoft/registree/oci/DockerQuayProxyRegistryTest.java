@@ -34,10 +34,10 @@ public class DockerQuayProxyRegistryTest extends DockerRegistryTest {
 
   @Test
   public void pullFromProxy() throws Exception {
-    execute("docker", "pull", "localhost:8070/cilium/alpine-curl");
-    execute("docker", "pull", "localhost:8070/jitesoft/alpine");
+    execute("docker", "pull", registreeHostname + ":8070/cilium/alpine-curl");
+    execute("docker", "pull", registreeHostname + ":8070/jitesoft/alpine");
 
-    execute("docker", "rmi", "localhost:8070/cilium/alpine-curl");
-    execute("docker", "rmi", "localhost:8070/jitesoft/alpine");
+    execute("docker", "rmi", registreeHostname + ":8070/cilium/alpine-curl");
+    execute("docker", "rmi", registreeHostname + ":8070/jitesoft/alpine");
   }
 }

@@ -30,7 +30,7 @@ public class DockerHostedRegistryResourceTest extends DockerHostedRegistryWithDa
                 "/hosted",
                 "rw");
 
-    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, "localhost:8090");
+    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, registreeHostname + ":8090");
 
     initWithEmbedImages();
   }

@@ -74,37 +74,37 @@ public abstract class DockerHostedRegistryWithDatabaseTest extends DockerRegistr
     execute("sh", "-c", "docker load < " + alpineTar.getFile());
     execute("sh", "-c", "docker load < " + alpineCurlTar.getFile());
 
-    execute("docker", "tag", "alpine", "localhost:8090/alpine");
-    execute("docker", "tag", "alpine", "localhost:8090/alpine:ehe");
-    execute("docker", "tag", "alpine", "localhost:8090/alpine:test");
-    execute("docker", "tag", "alpine/curl", "localhost:8090/alpine/curl");
-    execute("docker", "tag", "alpine/curl", "localhost:8090/alpine/curl:ehe");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine:test");
+    execute("docker", "tag", "alpine/curl", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "tag", "alpine/curl", registreeHostname + ":8090/alpine/curl:ehe");
 
-    execute("docker", "push", "localhost:8090/alpine");
-    execute("docker", "push", "localhost:8090/alpine:ehe");
-    execute("docker", "push", "localhost:8090/alpine:test");
-    execute("docker", "push", "localhost:8090/alpine/curl");
-    execute("docker", "push", "localhost:8090/alpine/curl:ehe");
+    execute("docker", "push", registreeHostname + ":8090/alpine");
+    execute("docker", "push", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "push", registreeHostname + ":8090/alpine:test");
+    execute("docker", "push", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "push", registreeHostname + ":8090/alpine/curl:ehe");
 
     execute("docker", "rmi", "alpine");
     execute("docker", "rmi", "alpine/curl");
 
-    execute("docker", "rmi", "localhost:8090/alpine");
-    execute("docker", "rmi", "localhost:8090/alpine:ehe");
-    execute("docker", "rmi", "localhost:8090/alpine:test");
-    execute("docker", "rmi", "localhost:8090/alpine/curl");
-    execute("docker", "rmi", "localhost:8090/alpine/curl:ehe");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine:test");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl:ehe");
 
-    execute("docker", "pull", "localhost:8090/alpine");
-    execute("docker", "pull", "localhost:8090/alpine:ehe");
-    execute("docker", "pull", "localhost:8090/alpine:test");
-    execute("docker", "pull", "localhost:8090/alpine/curl");
-    execute("docker", "pull", "localhost:8090/alpine/curl:ehe");
+    execute("docker", "pull", registreeHostname + ":8090/alpine");
+    execute("docker", "pull", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "pull", registreeHostname + ":8090/alpine:test");
+    execute("docker", "pull", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "pull", registreeHostname + ":8090/alpine/curl:ehe");
 
-    execute("docker", "rmi", "localhost:8090/alpine");
-    execute("docker", "rmi", "localhost:8090/alpine:ehe");
-    execute("docker", "rmi", "localhost:8090/alpine:test");
-    execute("docker", "rmi", "localhost:8090/alpine/curl");
-    execute("docker", "rmi", "localhost:8090/alpine/curl:ehe");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine:test");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl:ehe");
   }
 }

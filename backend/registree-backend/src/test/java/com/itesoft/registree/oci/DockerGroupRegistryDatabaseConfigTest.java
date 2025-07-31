@@ -31,16 +31,16 @@ public class DockerGroupRegistryDatabaseConfigTest extends DockerRegistryTest {
   @Test
   public void pullFromGroup() throws Exception {
     execute("docker", "pull", "alpine");
-    execute("docker", "tag", "alpine", "localhost:8090/alpine:ehe");
-    execute("docker", "push", "localhost:8090/alpine:ehe");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine:ehe");
+    execute("docker", "push", registreeHostname + ":8090/alpine:ehe");
 
-    execute("docker", "pull", "localhost:8060/alpine");
-    execute("docker", "pull", "localhost:8060/alpine:ehe");
-    execute("docker", "pull", "localhost:8060/alpine/curl");
+    execute("docker", "pull", registreeHostname + ":8060/alpine");
+    execute("docker", "pull", registreeHostname + ":8060/alpine:ehe");
+    execute("docker", "pull", registreeHostname + ":8060/alpine/curl");
 
     execute("docker", "rmi", "alpine");
-    execute("docker", "rmi", "localhost:8060/alpine");
-    execute("docker", "rmi", "localhost:8060/alpine:ehe");
-    execute("docker", "rmi", "localhost:8060/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8060/alpine");
+    execute("docker", "rmi", registreeHostname + ":8060/alpine:ehe");
+    execute("docker", "rmi", registreeHostname + ":8060/alpine/curl");
   }
 }

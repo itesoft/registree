@@ -35,8 +35,8 @@ public class DockerProxyRegistrySearchTest extends DockerRegistryTest {
 
   @Test
   public void listRepositories() throws Exception {
-    execute("docker", "pull", "localhost:8070/alpine");
-    execute("docker", "pull", "localhost:8070/alpine/curl");
+    execute("docker", "pull", registreeHostname + ":8070/alpine");
+    execute("docker", "pull", registreeHostname + ":8070/alpine/curl");
 
     final List<String> repositories = getRepositories(objectMapper, "http://localhost:8070");
     assertNotNull(repositories);

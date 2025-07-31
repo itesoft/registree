@@ -27,22 +27,22 @@ public class DockerHostedRegistryTest extends DockerRegistryTest {
   @Test
   public void nativeDockerPushAndPull() throws Exception {
     execute("docker", "pull", "alpine");
-    execute("docker", "tag", "alpine", "localhost:8090/alpine");
-    execute("docker", "push", "localhost:8090/alpine");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine");
+    execute("docker", "push", registreeHostname + ":8090/alpine");
     execute("docker", "rmi", "alpine");
-    execute("docker", "rmi", "localhost:8090/alpine");
-    execute("docker", "pull", "localhost:8090/alpine");
-    execute("docker", "rmi", "localhost:8090/alpine");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine");
+    execute("docker", "pull", registreeHostname + ":8090/alpine");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine");
   }
 
   @Test
   public void nativeDockerPushAndPullWithComplexName() throws Exception {
     execute("docker", "pull", "alpine/curl");
-    execute("docker", "tag", "alpine/curl", "localhost:8090/alpine/curl");
-    execute("docker", "push", "localhost:8090/alpine/curl");
+    execute("docker", "tag", "alpine/curl", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "push", registreeHostname + ":8090/alpine/curl");
     execute("docker", "rmi", "alpine/curl");
-    execute("docker", "rmi", "localhost:8090/alpine/curl");
-    execute("docker", "pull", "localhost:8090/alpine/curl");
-    execute("docker", "rmi", "localhost:8090/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "pull", registreeHostname + ":8090/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8090/alpine/curl");
   }
 }

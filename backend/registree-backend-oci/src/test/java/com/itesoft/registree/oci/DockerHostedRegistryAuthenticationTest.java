@@ -20,7 +20,7 @@ public class DockerHostedRegistryAuthenticationTest extends DockerRegistryTest {
                 "/hosted",
                 "rw");
 
-    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, "localhost:8090");
+    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, registreeHostname + ":8090");
   }
 
   @Override
@@ -36,8 +36,8 @@ public class DockerHostedRegistryAuthenticationTest extends DockerRegistryTest {
   @Test
   public void nativeDockerPushAndPull() throws Exception {
     execute("docker", "pull", "alpine");
-    execute("docker", "tag", "alpine", "localhost:8090/alpine");
-    execute("docker", "push", "localhost:8090/alpine");
+    execute("docker", "tag", "alpine", registreeHostname + ":8090/alpine");
+    execute("docker", "push", registreeHostname + ":8090/alpine");
   }
 
   @Test
@@ -51,6 +51,6 @@ public class DockerHostedRegistryAuthenticationTest extends DockerRegistryTest {
             "admin",
             "-p",
             "wrong",
-            "localhost:8090");
+            registreeHostname + ":8090");
   }
 }

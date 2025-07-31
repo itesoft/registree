@@ -26,22 +26,22 @@ public class DockerProxyRegistryTest extends DockerRegistryTest {
 
   @Test
   public void pullFromProxy() throws Exception {
-    execute("docker", "pull", "localhost:8070/alpine");
-    execute("docker", "pull", "localhost:8070/alpine/curl");
+    execute("docker", "pull", registreeHostname + ":8070/alpine");
+    execute("docker", "pull", registreeHostname + ":8070/alpine/curl");
 
-    execute("docker", "rmi", "localhost:8070/alpine");
-    execute("docker", "rmi", "localhost:8070/alpine/curl");
+    execute("docker", "rmi", registreeHostname + ":8070/alpine");
+    execute("docker", "rmi", registreeHostname + ":8070/alpine/curl");
   }
 
   @Test
   public void pushToProxy() throws Exception {
     execute("docker", "pull", "alpine");
-    execute("docker", "tag", "alpine", "localhost:8070/alpine");
+    execute("docker", "tag", "alpine", registreeHostname + ":8070/alpine");
     execute(1,
             "unauthorized",
             1, // last line
             "docker",
             "push",
-            "localhost:8070/alpine");
+            registreeHostname + ":8070/alpine");
   }
 }

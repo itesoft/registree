@@ -55,8 +55,9 @@ public class DockerHostedRegistrySearchTest extends DockerRegistryTest {
   }
 
   private void populateRegistry(final String nameAndTag) throws Exception {
+    System.out.println(registreeHostname);
     execute("docker", "pull", nameAndTag);
-    execute("docker", "tag", nameAndTag, "localhost:8090/" + nameAndTag);
-    execute("docker", "push", "localhost:8090/" + nameAndTag);
+    execute("docker", "tag", nameAndTag, registreeHostname + ":8090/" + nameAndTag);
+    execute("docker", "push", registreeHostname + ":8090/" + nameAndTag);
   }
 }

@@ -1,5 +1,6 @@
 package com.itesoft.registree.oci.test;
 
+import static com.itesoft.registree.test.CommandExecutionHelper.executeGetOutput;
 import static com.itesoft.registree.oci.test.DockerHelper.removeDockerImages;
 
 import java.io.IOException;
@@ -9,9 +10,21 @@ import java.util.Map;
 import com.itesoft.registree.dto.ProxyRegistryFiltering;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 
 public abstract class DockerRegistryTest extends OciRegistryTest {
+  // CHECKSTYLE:OFF
+  protected String registreeHostname;
+  // CHECKSTYLE:ON
+
+  @BeforeAll
+  public void getIp() throws IOException, InterruptedException {
+    registreeHostname = System.getProperty("inDind") == null
+      ? "localhost"
+      : executeGetOutput("bash", "-c", "hostname -I | cut -d ' ' -f1");
+  }
+
   @BeforeEach
   public void dockerCleanup() throws IOException, InterruptedException {
     for (final String imageName : getDockerImagesToRemove()) {

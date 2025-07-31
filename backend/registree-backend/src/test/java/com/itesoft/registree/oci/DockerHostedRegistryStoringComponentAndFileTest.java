@@ -38,7 +38,7 @@ public class DockerHostedRegistryStoringComponentAndFileTest extends DockerHoste
                 "/hosted",
                 "rw");
 
-    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, "localhost:8090");
+    execute("docker", "login", "-u", USERNAME, "-p", PASSWORD, registreeHostname + ":8090");
   }
 
   @Override
@@ -61,12 +61,12 @@ public class DockerHostedRegistryStoringComponentAndFileTest extends DockerHoste
   private void pushImage(final String name)
     throws Exception {
     execute("docker", "pull", name);
-    execute("docker", "tag", name, "localhost:8090/" + name);
-    execute("docker", "push", "localhost:8090/" + name);
+    execute("docker", "tag", name, registreeHostname + ":8090/" + name);
+    execute("docker", "push", registreeHostname + ":8090/" + name);
     execute("docker", "rmi", name);
-    execute("docker", "rmi", "localhost:8090/" + name);
-    execute("docker", "pull", "localhost:8090/" + name);
-    execute("docker", "rmi", "localhost:8090/" + name);
+    execute("docker", "rmi", registreeHostname + ":8090/" + name);
+    execute("docker", "pull", registreeHostname + ":8090/" + name);
+    execute("docker", "rmi", registreeHostname + ":8090/" + name);
   }
 
   private void assertComponentAndFiles(final String name,
